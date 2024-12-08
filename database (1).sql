@@ -1297,6 +1297,7 @@ SELECT *
 FROM Tinh_Doanh_Thu_Cua_Cua_Hang_Trong_Khoang_TG('0911111111', '2024-01-01', '2024-12-31');
 GO
 
+
 CREATE PROCEDURE LichSuMuaHang
     @SoDienThoai NVARCHAR(15),      -- Số điện thoại của khách hàng
     @NgayBatDau DATE,               -- Ngày bắt đầu lọc
@@ -1305,6 +1306,7 @@ AS
 BEGIN
     -- Truy vấn lịch sử mua hàng
     SELECT 
+        sp.Ten_San_Pham,
         dh.Trang_Thai_Don_Hang AS TrangThai,
         COUNT(dh.Id_Don_Hang) AS SoLuongDonHang,
         SUM(spd.So_Luong_San_Pham * spd.Gia_Luc_Dat) AS TongTienDaChi,
@@ -1318,11 +1320,14 @@ BEGIN
     INNER JOIN 
         San_Pham_Trong_Don_Hang spd ON dh.Id_Don_Hang = spd.Id_Don_Hang
     INNER JOIN
+        San_Pham sp ON spd.Id_San_Pham = sp.Id_San_Pham AND spd.Id_Shop = sp.Id_Shop
+    INNER JOIN
         Hoa_Don hd ON hd.Id_Don_Hang = dh.Id_Don_Hang
     WHERE 
         ndbt.Sdt = @SoDienThoai
         AND hd.Ngay_Giao_Dich BETWEEN @NgayBatDau AND @NgayKetThuc
     GROUP BY 
+        sp.Ten_San_Pham,
         dh.Trang_Thai_Don_Hang
     HAVING 
         COUNT(dh.Id_Don_Hang) > 0  -- Kiểm tra nếu có ít nhất 1 đơn hàng
@@ -1331,7 +1336,7 @@ BEGIN
 END;
 GO
 EXEC LichSuMuaHang 
-    @SoDienThoai = '0988888888', 
+    @SoDienThoai = '0966666666', 
     @NgayBatDau = '2024-01-01', 
     @NgayKetThuc = '2024-12-31';
 GO

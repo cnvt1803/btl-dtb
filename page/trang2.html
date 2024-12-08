@@ -233,7 +233,7 @@
     <!-- Main Buttons -->
     <div class="button-container">
         <button onclick="openModal('ratingModal')">Số điểm đánh giá</button>
-        <button onclick="openModal('rankingModal')">Lịch sử mua hàng của Khách hàng</button>
+        <button onclick="openModal('historyModal')">Lịch sử mua hàng của Khách hàng</button>
     </div>
 
     <!-- Modal Số điểm đánh giá -->
@@ -250,16 +250,15 @@
             </form>
         </div>
     </div>
-
     <!-- Modal Xếp hạng cửa hàng -->
-    <div id="rankingModal" class="modal">
+    <div id="historyModal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeModal('rankingModal')">&times;</span>
+            <span class="close" onclick="closeModal('historyModal')">&times;</span>
             <h2>Lịch sử mua hàng</h2>
-            <form onsubmit="handleSubmit(event, 'ranking')">
+            <form onsubmit="handleSubmit(event, 'history')">
                 <div class="form-group">
                     <label>Số điện thoại:</label>
-                    <input type="text" name="Sdt" required>
+                    <input type="tel" name="Sdt" pattern="[0-9]{10}" required>
                 </div>
                 <div class="form-group">
                     <label>Ngày bắt đầu:</label>
@@ -273,7 +272,6 @@
             </form>
         </div>
     </div>
-
     <!-- Bảng kết quả đánh giá -->
     <div id="ratingTable" class="result-table" style="display: none;">
         <div class="table-container">
@@ -304,12 +302,13 @@
     </div>
 
     <!-- Bảng xếp hạng cửa hàng -->
-    <div id="rankingTable" class="result-table" style="display: none;">
+    <div id="xemlichsu" class="result-table" style="display: none;">
         <div class="table-container">
             <h2>Lịch sử mua hàng</h2>
             <table>
                 <thead>
                     <tr>
+                        <th>Tên sản phẩm</th>
                         <th>Trạng thái</th>
                         <th>Số lượng đơn hàng</th>
                         <th>Tổng tiền đã chi</th>
@@ -332,20 +331,6 @@
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = "none";
         }
-
-        function handleSubmit(event, action) {
-            event.preventDefault();
-            const formData = new FormData(event.target);
-            const data = Object.fromEntries(formData);
-
-            // Xử lý dữ liệu
-            console.log('Action:', action);
-            console.log('Data:', data);
-
-            // Đóng modal sau khi xử lý
-            closeModal(action + 'Modal');
-        }
-
         // Đóng modal khi click bên ngoài
         window.onclick = function (event) {
             if (event.target.className === 'modal') {
@@ -353,24 +338,114 @@
             }
         }
 
-        function handleSubmit(event, action) {
-            event.preventDefault();
+        async function handleSubmit(event, action) {
+            event.preventDefault(); // Ngừng việc gửi form mặc định
+
             const formData = new FormData(event.target);
-            const data = Object.fromEntries(formData);
+            const params = new URLSearchParams();
 
-            // Ẩn tất cả các bảng kết quả
-            document.getElementById('ratingTable').style.display = 'none';
-            document.getElementById('rankingTable').style.display = 'none';
-
-            // Hiển thị bảng tương ứng
-            if (action === 'rating') {
-                document.getElementById('ratingTable').style.display = 'block';
-            } else if (action === 'ranking') {
-                document.getElementById('rankingTable').style.display = 'block';
+            // Kiểm tra và format ngày
+            const startDate = new Date(formData.get('startDay'));
+            const endDate = new Date(formData.get('endDay'));
+            if (startDate > endDate) {
+                alert("Ngày bắt đầu không thể lớn hơn ngày kết thúc.");
+                return;
             }
 
-            // Đóng modal
-            closeModal(action + 'Modal');
+            formData.forEach((value, key) => {
+                if (key.includes("Day")) { // Kiểm tra các trường liên quan đến ngày
+                    const date = new Date(value);
+                    if (isNaN(date)) {
+                        alert("Ngày tháng không hợp lệ");
+                        return;
+                    }
+                    const formattedDate = date.toISOString().split("T")[0];
+                    params.append(key, formattedDate);
+                } else if (key === "Sdt" && !/^\d{10}$/.test(value)) {
+                    alert("Số điện thoại không hợp lệ. Vui lòng nhập đúng 10 chữ số.");
+                    return;
+                } else {
+                    params.append(key, value);
+                }
+            });
+            let url = "";
+            if (action === "history") {
+             // In URL để kiểm tra tham số
+                url = `http://localhost:5001/database/lichsu?${params.toString()}`;
+                console.log("URL:", url);
+            }
+            // ELSE KHI LÀ SỐ ĐIỂM ĐÁNH GIÁ
+            try {
+                // Gửi yêu cầu tới API
+                const response = await fetch(url, {
+                    method: "GET",
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || "Có lỗi xảy ra khi kết nối tới API");
+                }
+
+                if (action === "history") {
+                    updateHistoryTable(result); // Hàm để cập nhật bảng lịch sử mua hàng
+                    document.getElementById("xemlichsu").style.display = "block"; // Hiển thị bảng kết quả nếu có dữ liệu
+                }
+                // ELSE KHI LÀ SỐ ĐIỂM ĐÁNH GIÁ
+            } catch (error) {
+                console.error("Error:", error);
+                alert(`Lỗi: ${error.message}`);
+            }
+            closeModal(action + "Modal");
+        }
+
+
+        function updateHistoryTable(data) {
+            const tableBody = document.getElementById("xemlichsu").getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = "";
+
+            // Kiểm tra nếu có dữ liệu trả về
+            if (data && data.length > 0) {
+                // Lặp qua từng item trong dữ liệu
+                data.forEach(item => {
+                    const row = document.createElement("tr");
+                    //Tên sẩn phẩm
+                    const productNameCell = document.createElement("td");
+                    productNameCell.textContent = item.Ten_San_Pham || 'N/A'; // Trạng thái nếu có
+                    row.appendChild(productNameCell);
+                    // Tạo ô cho trạng thái
+                    const statusCell = document.createElement("td");
+                    statusCell.textContent = item.TrangThai || 'N/A'; // Trạng thái nếu có
+                    row.appendChild(statusCell);
+
+                    // Tạo ô cho số đơn hàng
+                    const orderCountCell = document.createElement("td");
+                    orderCountCell.textContent = item.SoLuongDonHang || 0; // Số đơn hàng
+                    row.appendChild(orderCountCell);
+
+                    // Tạo ô cho tổng số tiền đã chi tiêu
+                    const totalSpentCell = document.createElement("td");
+                    totalSpentCell.textContent = item.TongTienDaChi ? item.TongTienDaChi.toFixed(2) + "đ" : '0đ'; // Định dạng tổng chi tiêu
+                    row.appendChild(totalSpentCell);
+
+                    // Tạo ô cho ngày thanh toán
+                    const paymentDateCell = document.createElement("td");
+                    paymentDateCell.textContent = item.NgayThanhToan || 'N/A'; // Ngày thanh toán nếu có
+                    row.appendChild(paymentDateCell);
+
+                    // Thêm hàng vào bảng
+                    tableBody.appendChild(row);
+                });
+                document.getElementById("xemlichsu").style.display = "block"; // Hiển thị bảng kết quả
+            } else {
+                // Nếu không có dữ liệu, hiển thị thông báo
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = 4; // Chiếm toàn bộ các cột
+                cell.textContent = "Không có dữ liệu";
+                row.appendChild(cell);
+                tableBody.appendChild(row);
+            }
         }
     </script>
 </body>
